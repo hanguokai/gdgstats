@@ -1,0 +1,62 @@
+<link rel="stylesheet" href="//cdnjs.cloudflare.com/ajax/libs/twitter-bootstrap/3.0.3/css/bootstrap.min.css">
+<?!= include('Style'); ?>
+
+<div class="container">
+
+<div id='header'>
+  <div>
+    <a href="https://developers.google.com/groups/" target="_blank"><img src='https://developers.google.com/_static/6aac4ec301/images/GDG-program-logo.png'></a>
+    <a href="https://developers.google.com/" target="_blank"><img src='https://developers.google.com/_static/a7027dbead/images/developers-logo.svg'></a>
+  </div>
+  <h1>GDG Events Statistic Lookup</h1>
+</div>
+  
+<form>
+  <div class="panel panel-default">
+    <div class="panel-body">
+      <table class='table'>
+        <tr>
+          <th>Select Country</th>
+          <th>Select GDG</th>
+          <th>Country Report</th>
+          <th>Start Date</th>
+          <th>End Date(Optional)</th>
+        </tr>
+        
+        <tr>
+          <td>
+            <select id='country' class="form-control" onchange="updateGDG(this)">
+            <? var countries = getCountries(); 
+              for(var i = 0, length = countries.length; i < length; i++) { ?>
+              <option value="<?= countries[i] ?>"><?= countries[i] ?></option>
+            <? } ?>
+            </select>    
+          </td>    
+          <td>
+            <select id='gdg' class="form-control"></select>
+          </td>
+          <td>
+            <input type="checkbox" id="countryReport" name="countryReport" onclick='selectCountryReport()'>
+          </td>
+          <td>
+            <input type='date' name='start' id='start' class="form-control">
+          </td>
+          <td>
+            <input type='date' name='end' id='end' class="form-control">
+          </td>    
+        </tr>
+      </table>
+    </div>
+  
+    <div class="panel-heading">
+      <button onclick='gdgQuery()' class="btn btn-primary">Generate Stats Report</button> 
+      <button onclick='clearReport()' class="btn btn-default">Clear Report</button>
+    </div>
+  </div>
+</form>
+
+<div id='result'></div>
+  
+</div><!-- end of container -->
+
+<?!= include('Script'); ?>

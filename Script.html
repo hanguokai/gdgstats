@@ -1,0 +1,223 @@
+<script>
+
+/**
+ * update GDG options for a country
+ */
+function updateGDG(cSelect){
+  var gSelect = document.getElementById('gdg'); 
+  gSelect.innerHTML = '<option>Loading...</option>';
+  function updateSelect(groups){
+    var result = '';
+    groups.forEach(function(gdg){
+      result += '<option value="' + gdg.gplus_id + '">' + gdg.name + '</option>'
+    });
+    gSelect.innerHTML = result;
+  }
+  
+  google.script.run.withSuccessHandler(updateSelect).getGDGbyCountry(cSelect.value);
+}
+
+
+/**
+ * set Country by name
+ */
+function setDefaultCountry(country){
+  var cSelect = document.getElementById('country');
+  
+  for(var i = 0, j = cSelect.options.length; i < j; i++) {
+    if(cSelect.options[i].text === country) {
+      cSelect.selectedIndex = i;
+      updateGDG(cSelect);
+      break;
+    }
+  }
+}
+
+// init
+setDefaultCountry('China');
+
+function selectCountryReport(){
+  var countryReport = document.getElementById("countryReport");
+  var gSelect = document.getElementById("gdg");
+  
+  if(countryReport.checked){
+    gSelect.disabled = true;
+  } else {
+    gSelect.disabled = false;
+  }
+}
+
+function clearReport(){
+  document.getElementById('result').innerHTML = '';
+}
+
+/**
+ * show query result in a table
+ */
+function showResult(json, countryReport){
+  if(json == null)
+    return;
+    
+  var result = '';
+  
+  if(countryReport){ // show gdg stats table
+    var gdgTable = "<ul>";
+    countryReport[1].forEach(function(stat){ // stat is [gdgname, event_count, attendee_count]
+      gdgTable += "<li>" + stat[0] + " : " + stat[1] + " events, " + stat[2] + " participants</li>";
+    });
+    gdgTable += "</ul>";
+  }
+  
+  var eventTable = "<table class='table table-bordered table-striped'>";
+  var count = 0;
+  //set table header
+  var header = "<thead><tr><th>Date</th>";
+  if(countryReport){
+    header += "<th>GDG</th>";
+  }
+  header += "<th>Title</th><th>Participants</th><th>G+ Event Link</th><th>DevSite Event Link</th></tr></thead>";
+  eventTable += header;
+  eventTable += '<tbody>';
+  
+  //set content
+  json.forEach(function(e){
+    var row = "<tr>";
+  
+    // event date
+    row += "<td>" + new Date(e.start).toLocaleDateString();
+    if(e.temporalRelation == "future"){
+      row += "<span class='label label-success'>(Future)</span>";
+    } else if(e.temporalRelation == "present"){
+      row += "<span class='label label-success'>(Now)</span>";
+    }
+    row += "</td>";
+    
+    if(countryReport){ // lookup gdg name
+      row += "<td>" + countryReport[0][e.id] + "</td>";
+    }
+    
+    row += "<td>" + e.title + "</td>"
+    
+    if(e.participantsCount){
+      row += "<td>" + e.participantsCount + "</td>"
+      count += e.participantsCount
+    } else {
+      if(e.temporalRelation == "past"){ // the event has ended but not update participants
+        row += "<td><span class='label label-danger'>Missing Data</span></td>"
+      } else { // the event may be not ended
+        row += "<td>Future Event</td>"
+      }
+    }
+    
+    if(e.gPlusEventLink){
+      row += "<td><a target='_blank' href='" + e.gPlusEventLink + "'>G+ event</a></td>"
+    } else {
+      row += "<td><span class='label label-warning'>Missing Link</span></td>"
+    }
+    row += "<td><a target='_blank' href='https://developers.google.com" + e.link + "'>DevSite event</a></td>"
+
+    row += "</tr>"
+    eventTable += row;
+  });
+  eventTable += '</tbody></table>';
+  
+  // compose stats result
+  var gSelect = document.getElementById('gdg');
+  result = '<hr><h3 id="resultHeader" class="alert alert-success">';
+  if(countryReport){
+    result += document.getElementById('country').value + ' has ' + countryReport[1].length + ' GDGs, ';
+  } else {
+    result += gSelect.options[gSelect.selectedIndex].text + ' has '
+  }
+  result += json.length + ' Events, total number of participants is ' + count + '</h3>';
+  if(countryReport){result += gdgTable;}
+  result += eventTable;
+  
+  document.getElementById('result').innerHTML = result;  
+  
+  //continue query GDG's follows count
+  if(!countryReport){
+    google.script.run.withSuccessHandler(function(count){
+      if(count){
+        document.getElementById('resultHeader').innerHTML += ', and has ' + count + ' followers.';  
+      }
+    }).circledCount(gSelect.value);
+  }
+}
+
+function gdgQuery(){
+  var id = document.getElementById('gdg').value;
+  var gSelect = document.getElementById('gdg');
+  var loading = document.getElementById('result');
+  loading.innerHTML = 'Loading...';
+  var startDate = document.getElementById('start').value;
+  var start = 0;
+  var endDate = document.getElementById('end').value;
+  var end = null;
+    
+  if(startDate){
+    start = new Date(startDate).getTime()/1000; // begin of a day
+  }
+  if(endDate){
+    end = new Date(endDate).getTime()/1000 + 3600*24; // end of a day
+  }
+  
+
+  if(document.getElementById("countryReport").checked){ // country report
+    for(var i = 0, j = gSelect.options.length; i < j; i++) {
+      google.script.run.withSuccessHandler(collectManyResult).withFailureHandler(collectManyResult)
+        .withUserObject(gSelect.options[i].text).fetchData(gSelect.options[i].value, start, end);
+    }
+  } else { // single gdg report
+    google.script.run.withSuccessHandler(showResult).fetchData(id, start, end);
+  }
+  
+  
+  // below for country report
+  var collectCount = 0;
+  var hasError = false;
+  var countryResult = []; // all event sort by date
+  var eventGdgMap = {}; // event id -> gdg name
+  var gdgStats = []; // each item is [gdgname, event_count, attendee_count]
+  
+  function collectManyResult(json, gdgName){
+    collectCount += 1;
+    
+    
+    if(!(json instanceof Error) && json != null){// withSuccessHandler and contain data
+      loading.innerHTML = 'get result ' + gdgName;
+      var c = 0;
+      for(var i = 0; i < json.length; i++){
+        eventGdgMap[json[i].id] = gdgName;
+        countryResult.push(json[i]);
+        if(json[i].participantsCount){
+          c += json[i].participantsCount;
+        }
+      }
+      gdgStats.push([gdgName, json.length, c]);
+    } else {
+      loading.innerHTML = 'Encounter some errors';
+      hasError = true;
+    }
+    
+    if(collectCount === gSelect.options.length){ // all result collect completely
+      loading.innerHTML = 'all data has received';
+      //sort all events by date
+      countryResult.sort(function(a, b){
+        return new Date(a.start).getTime() - new Date(b.start).getTime();
+      });
+      showResult(countryResult, [eventGdgMap, gdgStats]);
+    }
+  }
+}
+
+function escapeHtml(unsafe) {
+  return unsafe
+       .replace(/&/g, "&amp;")
+       .replace(/</g, "&lt;")
+       .replace(/>/g, "&gt;")
+       .replace(/"/g, "&quot;")
+       .replace(/'/g, "&#039;");
+}
+  
+</script>
